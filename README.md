@@ -49,6 +49,69 @@ Core pieces:
 
 See `docs/terminal_setup.md`.
 
+## Docker Setup (Alternative)
+
+Docker Compose provides an all-in-one containerized setup with 0 A.D., noVNC web viewer, OpenEnv proxy, and stepper.
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+
+### Quick Start with Docker
+
+1) Start all services:
+
+```bash
+docker compose up -d
+```
+
+2) Access the services:
+
+- **noVNC Web Viewer**: http://localhost:6080/vnc.html (view the game in your browser)
+- **OpenEnv API**: http://localhost:8001 (proxy endpoint, changed from 8000 to avoid conflicts)
+- **0 A.D. RL Interface**: 127.0.0.1:6000 (internal)
+
+3) Test the API:
+
+```bash
+curl http://localhost:8001/health
+```
+
+### Services
+
+The Docker setup includes:
+
+- **zero-ad**: 0 A.D. game running with RL interface on port 6000, X server on display :99, VNC on 5900, noVNC on 6080
+- **openenv-proxy**: OpenEnv API server on port 8001
+- **stepper**: Keeps the simulation running continuously
+- **client**: Example client (runs once and exits)
+- **scratch**: Utility container for debugging
+
+### Configuration
+
+Environment variables in `docker-compose.yml`:
+
+- `ZEROAD_RL_INTERFACE`: 127.0.0.1:6000
+- `ZEROAD_MAP`: scenarios/arcadia
+- `ZEROAD_PLAYERS`: 2
+- `DISPLAY_NUM`: 99 (X display number)
+- `VNC_PORT`: 5900
+- `NOVNC_PORT`: 6080
+
+### Persistent Data
+
+Game data is persisted in local directories (auto-created):
+
+- `./0ad-user-data`: Player data, replays, saves
+- `./0ad-user-config`: Configuration files
+- `./0ad`: Shared game directory
+
+### Stopping
+
+```bash
+docker compose down
+```
+
 ## Typical Workflow
 
 1) Launch 0 A.D. with RL interface:

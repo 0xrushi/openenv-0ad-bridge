@@ -1,0 +1,28 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# 0 A.D. needs a display; use Xvfb for headless runs.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      bash \
+      ca-certificates \
+      openbox \
+      novnc \
+      websockify \
+      xvfb \
+      xauth \
+      x11vnc \
+      x11-utils \
+      0ad \
+ && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user for running 0ad
+RUN useradd -m -u 1000 -s /bin/bash zeroad
+
+WORKDIR /app
+COPY . /app
+RUN chown -R zeroad:zeroad /app
+
+EXPOSE 5900 6080

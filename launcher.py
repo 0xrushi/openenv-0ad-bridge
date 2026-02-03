@@ -39,6 +39,10 @@ def build_cmd(
     if rl_addr:
         cmd.append(f"--rl-interface={rl_addr}")
 
+    # Useful in containers/CI where audio devices aren't present.
+    if os.environ.get("ZEROAD_NOSOUND") == "1":
+        cmd.append("-nosound")
+
     return cmd
 
 
@@ -47,7 +51,9 @@ def main() -> None:
         description="Launch 0 A.D. with RL interface enabled"
     )
     parser.add_argument(
-        "--binary", default="/usr/bin/0ad", help="Path to 0 A.D. binary"
+        "--binary",
+        default="/usr/games/pyrogenesis",
+        help="Path to 0 A.D. binary (or '0ad' if on PATH)",
     )
     parser.add_argument(
         "--map",
@@ -57,7 +63,15 @@ def main() -> None:
     parser.add_argument("--players", type=int, default=2, help="Number of players")
     parser.add_argument("--xres", type=int, default=1276, help="Window width")
     parser.add_argument("--yres", type=int, default=768, help="Window height")
+    parser.add_argument(
+        "--nosound",
+        action="store_true",
+        help="Disable audio (-nosound). Also sets ZEROAD_NOSOUND=1 for consistency.",
+    )
     args = parser.parse_args()
+
+    if args.nosound:
+        os.environ["ZEROAD_NOSOUND"] = "1"
 
     cmd = build_cmd(args.binary, args.map, args.players, args.xres, args.yres)
     print("cmd:", " ".join(cmd))

@@ -1,0 +1,75 @@
+services:
+  zero-ad:
+    build:
+      context: .
+      dockerfile: Dockerfile.zero-ad
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      ZEROAD_RL_INTERFACE: 127.0.0.1:6000
+      ZEROAD_MAP: scenarios/arcadia
+      ZEROAD_PLAYERS: "2"
+      ZEROAD_XRES: "1276"
+      ZEROAD_YRES: "768"
+      ZEROAD_NOSOUND: "1"
+      # noVNC settings (exposed via host networking)
+      DISPLAY_NUM: "99"
+      VNC_PORT: "5900"
+      NOVNC_PORT: "6080"
+      SCREEN_W: "1280"
+      SCREEN_H: "720"
+      SCREEN_DEPTH: "24"
+      # Optional: set a password for VNC/noVNC access
+      # VNC_PASSWORD: "change-me"
+    command: bash /app/docker/zero_ad_novnc.sh
+    volumes:
+      # Persist 0 A.D. user data between runs (replays, saves, logs, configs).
+      - ${ZEROAD_USER_DATA_DIR:-./0ad-user-data}:/root/.local/share/0ad:rw
+      - ${ZEROAD_USER_CONFIG_DIR:-./0ad-user-config}:/root/.config/0ad:rw
+      # Also expose a shared "0ad game" mount for interop.
+      - ${ZEROAD_GAME_DIR:-./0ad}:/0ad:rw
+
+  openenv-proxy:
+    build: .
+    network_mode: host
+    depends_on:
+      - zero-ad
+    environment:
+      ZEROAD_RL_URL: http://127.0.0.1:6000
+    command: python tools/run_openenv_zero_ad_server.py --host=0.0.0.0 --port=8001
+    volumes:
+      - ./run:/app/run
+      - ${ZEROAD_GAME_DIR:-./0ad}:/0ad:rw
+
+  stepper:
+    build: .
+    network_mode: host
+    depends_on:
+      - zero-ad
+    environment:
+      ZEROAD_RL_URL: http://127.0.0.1:6000
+      ZEROAD_STEP_SLEEP: "0.01"
+      ZEROAD_STATE_OUT: /app/run/latest_state.json
+      ZEROAD_STATE_EVERY_N: "10"
+    command: python tools/execute_move.py --run
+    volumes:
+      - ./run:/app/run
+      - ${ZEROAD_GAME_DIR:-./0ad}:/0ad:rw
+
+  client:
+    build: .
+    network_mode: host
+    depends_on:
+      - openenv-proxy
+    command: bash tools/openenv_examples.sh http://127.0.0.1:8001
+    volumes:
+      - ./run:/app/run
+      - ${ZEROAD_GAME_DIR:-./0ad}:/0ad:rw
+
+  scratch:
+    build: .
+    network_mode: host
+    command: sleep infinity
+    volumes:
+      - ./run:/app/run
+      - ${ZEROAD_GAME_DIR:-./0ad}:/0ad:rw
