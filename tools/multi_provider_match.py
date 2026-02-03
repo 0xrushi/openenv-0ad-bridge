@@ -39,15 +39,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Literal
 
-try:
-    from pydantic import BaseModel, Field, ConfigDict
-    PYDANTIC_AVAILABLE = True
-except ImportError:
-    PYDANTIC_AVAILABLE = False
-    print("Warning: pydantic not installed. Schema enforcement disabled.")
-    print("Install with: pip install pydantic")
-
 import tomllib
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ============================================================================
@@ -167,63 +160,65 @@ def _summarize_state(
 # Pydantic Models for Schema Enforcement
 # ============================================================================
 
-if PYDANTIC_AVAILABLE:
-    class GameCommand(BaseModel):
-        """A single game command (walk, attack, gather, etc.)"""
-        type: str = Field(..., description="Command type (walk, attack, gather, train, etc.)")
-        entities: Optional[List[int]] = Field(None, description="Entity IDs to command")
-        entity: Optional[int] = Field(None, description="Single entity ID (for research, etc.)")
-        x: Optional[float] = Field(None, description="X coordinate")
-        z: Optional[float] = Field(None, description="Z coordinate")
-        target: Optional[int] = Field(None, description="Target entity ID")
-        queued: Optional[bool] = Field(False, description="Whether to queue the command")
-        pushFront: Optional[bool] = Field(None, description="Push to front of queue")
-        template: Optional[str] = Field(None, description="Template name for construct/train")
-        count: Optional[int] = Field(None, description="Count for train command")
-        angle: Optional[float] = Field(None, description="Angle for construct")
-        allowCapture: Optional[bool] = Field(None, description="Allow capturing buildings")
-        targetClasses: Optional[Dict[str, List[str]]] = Field(None, description="Target classes for attack-walk")
-        name: Optional[str] = Field(None, description="Name for stance/formation")
-        autocontinue: Optional[bool] = Field(None, description="Auto-continue for repair")
-        garrisonHolder: Optional[int] = Field(None, description="Garrison holder entity ID")
-        garrisonHolders: Optional[List[int]] = Field(None, description="Garrison holder entity IDs")
-        metadata: Optional[Dict[str, Any]] = Field(None, description="Metadata for train command")
 
-        model_config = ConfigDict(extra="allow")  # Allow additional fields for flexibility
+class GameCommand(BaseModel):
+    """A single game command (walk, attack, gather, etc.)"""
+    type: str = Field(..., description="Command type (walk, attack, gather, train, etc.)")
+    entities: Optional[List[int]] = Field(None, description="Entity IDs to command")
+    entity: Optional[int] = Field(None, description="Single entity ID (for research, etc.)")
+    x: Optional[float] = Field(None, description="X coordinate")
+    z: Optional[float] = Field(None, description="Z coordinate")
+    target: Optional[int] = Field(None, description="Target entity ID")
+    queued: Optional[bool] = Field(False, description="Whether to queue the command")
+    pushFront: Optional[bool] = Field(None, description="Push to front of queue")
+    template: Optional[str] = Field(None, description="Template name for construct/train")
+    count: Optional[int] = Field(None, description="Count for train command")
+    angle: Optional[float] = Field(None, description="Angle for construct")
+    allowCapture: Optional[bool] = Field(None, description="Allow capturing buildings")
+    targetClasses: Optional[Dict[str, List[str]]] = Field(None, description="Target classes for attack-walk")
+    name: Optional[str] = Field(None, description="Name for stance/formation")
+    autocontinue: Optional[bool] = Field(None, description="Auto-continue for repair")
+    garrisonHolder: Optional[int] = Field(None, description="Garrison holder entity ID")
+    garrisonHolders: Optional[List[int]] = Field(None, description="Garrison holder entity IDs")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Metadata for train command")
 
-    class GameAction(BaseModel):
-        """A single OpenEnv action"""
-        op: Literal["push_command", "evaluate"] = Field(..., description="Operation type")
-        player_id: Optional[int] = Field(None, description="Player ID (for push_command)")
-        cmd: Optional[GameCommand] = Field(None, description="Command (for push_command)")
-        code: Optional[str] = Field(None, description="JavaScript code (for evaluate)")
+    model_config = ConfigDict(extra="allow")  # Allow additional fields for flexibility
 
-    class GameActions(BaseModel):
-        """Container for multiple game actions"""
-        actions: List[GameAction] = Field(default_factory=list, description="List of actions to execute")
 
-        model_config = ConfigDict(
-            json_schema_extra={
-                "examples": [
-                    {
-                        "actions": [
-                            {
-                                "op": "push_command",
-                                "player_id": 1,
-                                "cmd": {
-                                    "type": "walk",
-                                    "entities": [123, 124],
-                                    "x": 600,
-                                    "z": 650,
-                                    "queued": False,
-                                    "pushFront": True
-                                }
+class GameAction(BaseModel):
+    """A single OpenEnv action"""
+    op: Literal["push_command", "evaluate"] = Field(..., description="Operation type")
+    player_id: Optional[int] = Field(None, description="Player ID (for push_command)")
+    cmd: Optional[GameCommand] = Field(None, description="Command (for push_command)")
+    code: Optional[str] = Field(None, description="JavaScript code (for evaluate)")
+
+
+class GameActions(BaseModel):
+    """Container for multiple game actions"""
+    actions: List[GameAction] = Field(default_factory=list, description="List of actions to execute")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "actions": [
+                        {
+                            "op": "push_command",
+                            "player_id": 1,
+                            "cmd": {
+                                "type": "walk",
+                                "entities": [123, 124],
+                                "x": 600,
+                                "z": 650,
+                                "queued": False,
+                                "pushFront": True
                             }
-                        ]
-                    }
-                ]
-            }
-        )
+                        }
+                    ]
+                }
+            ]
+        }
+    )
 
 
 # ============================================================================
@@ -365,7 +360,7 @@ def _llm_chat(
     }
 
     # Add JSON schema enforcement if available
-    if use_schema and PYDANTIC_AVAILABLE:
+    if use_schema:
         try:
             # Gemini doesn't support strict json_schema mode well yet
             # Use simpler json_object mode for now
@@ -747,29 +742,25 @@ def main() -> None:
                 obj = None
                 validation_error = None
 
-                # Try Pydantic validation first (strictest)
-                if PYDANTIC_AVAILABLE:
-                    try:
-                        # Try direct JSON parse
-                        data = json.loads(output.strip())
-                        validated = GameActions.model_validate(data)
-                        obj = validated.model_dump(exclude_none=True)
-                    except json.JSONDecodeError as e:
-                        validation_error = f"JSON decode error: {e}"
-                        # Fallback to extraction
-                        obj = _json_extract(output)
-                        if obj:
-                            try:
-                                validated = GameActions.model_validate(obj)
-                                obj = validated.model_dump()
-                                validation_error = None  # Success via extraction
-                            except Exception as ve:
-                                validation_error = f"Pydantic validation error: {ve}"
-                    except Exception as e:
-                        validation_error = f"Pydantic validation error: {e}"
-                        obj = _json_extract(output)
-                else:
-                    # No Pydantic, use basic extraction
+                # Try Pydantic validation (strictest)
+                try:
+                    # Try direct JSON parse
+                    data = json.loads(output.strip())
+                    validated = GameActions.model_validate(data)
+                    obj = validated.model_dump(exclude_none=True)
+                except json.JSONDecodeError as e:
+                    validation_error = f"JSON decode error: {e}"
+                    # Fallback to extraction
+                    obj = _json_extract(output)
+                    if obj:
+                        try:
+                            validated = GameActions.model_validate(obj)
+                            obj = validated.model_dump()
+                            validation_error = None  # Success via extraction
+                        except Exception as ve:
+                            validation_error = f"Pydantic validation error: {ve}"
+                except Exception as e:
+                    validation_error = f"Pydantic validation error: {e}"
                     obj = _json_extract(output)
 
                 if not obj or "actions" not in obj or not isinstance(obj["actions"], list):

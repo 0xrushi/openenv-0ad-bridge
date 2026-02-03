@@ -6,18 +6,12 @@ These tests mock the underlying RL client so they can run without 0 A.D.
 import unittest
 from unittest.mock import Mock
 
-
-try:
-    from fastapi.testclient import TestClient
-except ModuleNotFoundError:  # pragma: no cover
-    TestClient = None  # type: ignore[assignment]
-
+from fastapi.testclient import TestClient
 
 from openenv_zero_ad.environment import ZeroADSession
 from openenv_zero_ad.server import create_app
 
 
-@unittest.skipIf(TestClient is None, "fastapi not installed")
 class TestOpenEnvZeroADServer(unittest.TestCase):
     def test_reset_returns_openenv_shape(self):
         session = ZeroADSession("http://example.invalid")

@@ -21,6 +21,9 @@ import argparse
 import socket
 from pathlib import Path
 
+import libtmux
+from libtmux.constants import PaneDirection
+
 
 def _sh(cmd: str) -> str:
     """Wrap command for bash -lc."""
@@ -44,8 +47,6 @@ def _split(target, vertical: bool):
 
     # libtmux>=0.33 uses `split(direction=PaneDirection.*)`.
     if hasattr(target, "split"):
-        from libtmux.constants import PaneDirection
-
         # Historical compatibility: older libtmux used `vertical=True` to mean a
         # side-by-side split. Map that to RIGHT. Otherwise split BELOW.
         direction = PaneDirection.Right if vertical else PaneDirection.Below
@@ -99,14 +100,6 @@ def main() -> None:
         "--no-kill", action="store_true", help="Do not kill an existing session"
     )
     args = parser.parse_args()
-
-    try:
-        import libtmux
-    except ModuleNotFoundError:
-        raise SystemExit(
-            "libtmux is not installed. Run: python -m pip install libtmux\n"
-            "Also ensure 'tmux' is installed on your system."
-        )
 
     project_root = Path(__file__).resolve().parent.parent
     venv_activate = project_root / ".venv" / "bin" / "activate"
