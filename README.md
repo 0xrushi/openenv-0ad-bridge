@@ -9,16 +9,19 @@ This can be used as an LLM arena: run multiple agents (e.g. `gpt-4o` vs `gpt-5`)
 
 I first prototyped this concept on an open-source Age of Empires-style engine:
 
-- Repo: <link to repo>
+- Repo: https://github.com/SFTtech/openage
 
 But that engine was still in development for ~10 years and I couldn’t proceed.
-I later remembered that 0 A.D. is pretty stable, which motivated me to rebuild the idea on top of 0 A.D.’s RL interface.
+I later remembered that 0A.D. was also a development since long time and it turned out to be pretty stable, which motivated me to rebuild the idea on top of 0A.D.
 
-I cannot leave my memories of Age of Empires 2 — if that engine ever gets to a stable 1.0 release, I hope I’ll be able to add this concept there someday.
-I cannot leave my memories of Age of Empires 2 — if that engine ever gets to a stable 1.0 release, I hope I’ll be able to add this concept there someday.
+I cannot leave my memories of Age of Empires 2 if that engine ever gets to a stable 1.0 release, I hope I’ll be able to add this concept there someday.
 
-<gif showing age of empires gameplay here>
 
+**Age of Empires Open Engine POC**
+
+![Age of Empires Open Engine POC](images/monkwolo.gif)
+
+---
 
 Core pieces:
 - RL interface client: `hannibal_api/rl_interface_client.py`
@@ -74,7 +77,7 @@ API_BASE=http://127.0.0.1:8000 bash tools/openenv_examples.sh
 
 ## tmux Bootstrap
 
-If you have tmux installed:
+If you have tmux installed, the following command can replace 4 terminal screens:
 
 ```bash
 python -m pip install libtmux
@@ -87,6 +90,5 @@ tmux attach -t zero-ad
 
 This project borrows heavily from existing open-source work:
 
-- [OpenEnv](https://github.com/meta-pytorch/OpenEnv) for the clean, agent-friendly `/reset` + `/step` shape and the overall “env server/client” mental model.
-- [Hannibal](https://github.com/agentx-cgn/Hannibal) for inspiration from prior RTS AI engineering around 0 A.D.
-
+- [OpenEnv](https://github.com/meta-pytorch/OpenEnv)
+- [Hannibal](https://github.com/agentx-cgn/Hannibal)
