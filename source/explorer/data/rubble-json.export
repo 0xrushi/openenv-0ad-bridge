@@ -1,0 +1,134 @@
+var RUBBLE = {
+  "rubble/rubble_1x1": {
+    "Classes": []
+  }, 
+  "rubble/rubble_1x1pal": {
+    "Classes": []
+  }, 
+  "rubble/rubble_1x3pal": {
+    "Classes": []
+  }, 
+  "rubble/rubble_2x2": {
+    "Classes": []
+  }, 
+  "rubble/rubble_2x4": {
+    "Classes": []
+  }, 
+  "rubble/rubble_3x3": {
+    "Classes": []
+  }, 
+  "rubble/rubble_3x6": {
+    "Classes": []
+  }, 
+  "rubble/rubble_4x2": {
+    "Classes": []
+  }, 
+  "rubble/rubble_4x4": {
+    "Classes": []
+  }, 
+  "rubble/rubble_4x4_dock": {
+    "Classes": []
+  }, 
+  "rubble/rubble_4x6": {
+    "Classes": []
+  }, 
+  "rubble/rubble_5x5": {
+    "Classes": []
+  }, 
+  "rubble/rubble_6x4": {
+    "Classes": []
+  }, 
+  "rubble/rubble_6x4_dock": {
+    "Classes": []
+  }, 
+  "rubble/rubble_6x6": {
+    "Classes": []
+  }, 
+  "rubble/rubble_8x8": {
+    "Classes": []
+  }, 
+  "rubble/rubble_celt_cc": {
+    "Classes": []
+  }, 
+  "rubble/rubble_celt_dock": {
+    "Classes": []
+  }, 
+  "rubble/rubble_field": {
+    "Classes": []
+  }, 
+  "rubble/rubble_hele_cc": {
+    "Classes": []
+  }, 
+  "rubble/rubble_hele_dock": {
+    "Classes": []
+  }, 
+  "rubble/rubble_iber_cc": {
+    "Classes": []
+  }, 
+  "rubble/rubble_iber_dock": {
+    "Classes": []
+  }, 
+  "rubble/rubble_kart_cc": {
+    "Classes": []
+  }, 
+  "rubble/rubble_kart_dock": {
+    "Classes": []
+  }, 
+  "rubble/rubble_maur_cc": {
+    "Classes": []
+  }, 
+  "rubble/rubble_pers_cc": {
+    "Classes": []
+  }, 
+  "rubble/rubble_pers_dock": {
+    "Classes": []
+  }, 
+  "rubble/rubble_rome_cc": {
+    "Classes": []
+  }, 
+  "rubble/rubble_rome_dock": {
+    "Classes": []
+  }, 
+  "rubble/rubble_rome_sb": {
+    "Classes": []
+  }, 
+  "rubble/rubble_stone_2x2": {
+    "Classes": []
+  }, 
+  "rubble/rubble_stone_3x3": {
+    "Classes": []
+  }, 
+  "rubble/rubble_stone_4x2": {
+    "Classes": []
+  }, 
+  "rubble/rubble_stone_4x4": {
+    "Classes": []
+  }, 
+  "rubble/rubble_stone_4x6": {
+    "Classes": []
+  }, 
+  "rubble/rubble_stone_5x5": {
+    "Classes": []
+  }, 
+  "rubble/rubble_stone_6x4": {
+    "Classes": []
+  }, 
+  "rubble/rubble_stone_6x6": {
+    "Classes": []
+  }, 
+  "rubble/rubble_stone_wall_long": {
+    "Classes": []
+  }, 
+  "rubble/rubble_stone_wall_medium": {
+    "Classes": []
+  }, 
+  "rubble/rubble_stone_wall_short": {
+    "Classes": []
+  }, 
+  "rubble/rubble_stone_wall_tower": {
+    "Classes": []
+  }, 
+  "rubble/rubble_wall": {
+    "Classes": []
+  }
+};

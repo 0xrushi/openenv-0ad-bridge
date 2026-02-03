@@ -1,0 +1,22 @@
+name: zero_ad_env
+version: 0.1.0
+description: 0 A.D. RL interface proxy environment (OpenEnv-format server)
+
+client:
+  class_name: GenericEnvClient
+  module: openenv.core.generic_client
+
+action:
+  class_name: ZeroADAction
+  module: openenv_zero_ad.models
+
+observation:
+  class_name: ZeroADObservation
+  module: openenv_zero_ad.models
+
+state:
+  class_name: ZeroADState
+  module: openenv_zero_ad.models
+
+default_image: null
+spec_version: 1

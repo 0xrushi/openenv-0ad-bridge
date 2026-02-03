@@ -1,0 +1,9 @@
+pydantic>=2
+
+# OpenEnv-compatible HTTP server for the 0 A.D. RL interface proxy
+fastapi>=0.110
+uvicorn>=0.29
+httpx>=0.27
+
+# Optional: tmux session bootstrapper
+libtmux>=0.46

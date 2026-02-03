@@ -1,0 +1,21 @@
+# LLM-vs-LLM match config (OpenEnv proxy)
+
+[match]
+openenv_base = "http://127.0.0.1:8001"
+state_file = "run/latest_state.json"
+decision_interval_s = 1.0
+max_actions_per_decision = 2
+
+[players.p1]
+player_id = 1
+name = "gpt-4o"
+model = "gpt-4o"
+temperature = 0.2
+max_output_tokens = 600
+
+[players.p2]
+player_id = 2
+name = "gpt-5"
+model = "gpt-5"
+temperature = 0.2
+max_output_tokens = 600
