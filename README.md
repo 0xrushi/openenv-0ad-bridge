@@ -4,6 +4,11 @@ Programmatic control of a running 0 A.D. match via the built-in RL interface HTT
 
 This can be used as an LLM arena: run multiple agents (e.g. `gpt-4o` vs `gpt-5`) that read a shared omniscient snapshot and issue low-level commands against the same running match.
 
+## Demo
+
+**0.A.D. movement demo**
+
+![0 A.D. Movement Demo](images/0admovedemo.gif)
 
 ## Origin Story
 
