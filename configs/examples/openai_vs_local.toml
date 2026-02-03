@@ -1,0 +1,48 @@
+# Example: OpenAI GPT-4o vs Local Llama-3
+# Demonstrates cloud vs local model comparison
+
+[match]
+openenv_base = "http://127.0.0.1:8001"
+state_file = "run/latest_state.json"
+decision_interval_s = 1.5
+max_actions_per_decision = 3
+max_entities_in_summary = 40
+
+log_decisions = true
+log_file = "run/openai_vs_local.jsonl"
+
+[players.openai]
+enabled = true  # Set to false to disable
+player_id = 1
+name = "OpenAI-GPT4o"
+provider = "openai"
+model = "gpt-4o"
+temperature = 0.2
+max_output_tokens = 800
+
+strategy_hint = """
+Balanced strategy:
+1. 10 workers for economy
+2. Early barracks + military production
+3. Scout aggressively
+4. Attack when you have 15+ military units
+"""
+
+[players.local]
+enabled = true  # Set to false to disable
+player_id = 2
+name = "Local-Llama3-70B"
+provider = "local"
+model = "llama-3-70b-instruct"
+base_url = "http://localhost:1234/v1"
+api_key = "not-needed"
+temperature = 0.3
+max_output_tokens = 800
+
+strategy_hint = """
+Aggressive rush strategy:
+1. 6 workers maximum
+2. Build barracks at 2 minutes
+3. Constant military production
+4. Attack at 4 minutes
+"""

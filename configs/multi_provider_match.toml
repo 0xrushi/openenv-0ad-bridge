@@ -1,0 +1,199 @@
+# Multi-Provider LLM Match Configuration
+# Supports: OpenAI, Grok (xAI), Gemini (Google), and local OpenAI-compatible endpoints
+
+[match]
+openenv_base = "http://127.0.0.1:8001"
+state_file = "run/latest_state.json"
+decision_interval_s = 1.0
+max_actions_per_decision = 3
+max_entities_in_summary = 50
+
+# Optional: Log all LLM interactions for analysis
+log_decisions = true
+log_file = "run/match_log.jsonl"
+
+# ============================================================================
+# PLAYER 1: OpenAI GPT-4o
+# ============================================================================
+[players.openai_p1]
+enabled = true  # Set to false to disable this player (use built-in 0 A.D. AI instead)
+player_id = 1
+name = "OpenAI-GPT4o"
+provider = "openai"  # openai, grok, or local
+
+# Model configuration
+model = "gpt-4o"
+temperature = 0.2
+max_output_tokens = 800
+
+# OpenAI settings (uses OPENAI_API_KEY and OPENAI_BASE_URL env vars)
+# Base URL defaults to https://api.openai.com/v1 if not set
+
+# Strategy prompt (optional - enhances default system prompt)
+strategy_hint = """
+Focus on:
+1. Early economy: Train 10+ workers, gather food and wood
+2. Military production: Build barracks by minute 5
+3. Aggressive expansion: Scout and attack-walk toward enemy
+4. Unit composition: Mix spearmen and archers
+"""
+
+# ============================================================================
+# PLAYER 2: Grok (xAI)
+# ============================================================================
+[players.grok_p2]
+enabled = false  # DISABLED: Set to true to enable Grok as Player 2
+player_id = 2
+name = "Grok-Beta"
+provider = "grok"
+
+# Grok model configuration
+model = "grok-beta"  # or "grok-2-latest"
+temperature = 0.3
+max_output_tokens = 800
+
+# Grok API settings
+# Requires: XAI_API_KEY environment variable
+# Base URL: https://api.x.ai/v1 (automatically set for grok provider)
+api_key_env = "XAI_API_KEY"
+
+strategy_hint = """
+Focus on:
+1. Defensive start: Build walls and towers early
+2. Economy balance: Maintain 60% workers, 40% military
+3. Tech rushing: Research phase advances quickly
+4. Late-game dominance: Build siege weapons
+"""
+
+# ============================================================================
+# PLAYER 3: Google Gemini (Disabled by default)
+# ============================================================================
+# [players.gemini]
+# enabled = false
+# player_id = 3
+# name = "Gemini-Pro"
+# provider = "gemini"
+#
+# # Gemini model configuration
+# model = "gemini-2.0-flash-exp"  # or "gemini-1.5-pro", "gemini-1.5-flash"
+# temperature = 0.3
+# max_output_tokens = 800
+#
+# # Gemini API settings
+# # Get API key from: https://aistudio.google.com/app/apikey
+# # Requires: GEMINI_API_KEY environment variable
+# api_key_env = "GEMINI_API_KEY"
+#
+# strategy_hint = """
+# Focus on:
+# 1. Efficient resource management
+# 2. Quick tech research
+# 3. Defensive positioning
+# 4. Counter-attacks
+# """
+
+# ============================================================================
+# EXAMPLE: Local OpenAI-Compatible Endpoint
+# ============================================================================
+# Uncomment to use a local model (e.g., LM Studio, Ollama, vLLM)
+#
+# [players.local_p1]
+# enabled = true
+# player_id = 1
+# name = "Local-Llama3"
+# provider = "local"
+#
+# model = "llama-3-70b-instruct"  # Model name supported by your local server
+# temperature = 0.4
+# max_output_tokens = 1000
+#
+# # Local endpoint configuration
+# base_url = "http://localhost:1234/v1"  # Your local OpenAI-compatible server
+# api_key = "not-needed"  # Some local servers still require a dummy key
+#
+# strategy_hint = """
+# Adaptive strategy:
+# 1. Analyze opponent's opening
+# 2. Counter their unit composition
+# 3. Exploit map resources efficiently
+# """
+
+# ============================================================================
+# EXAMPLE: Another Local Model on Different Port
+# ============================================================================
+# [players.local_p2]
+# enabled = true
+# player_id = 2
+# name = "Local-Mistral"
+# provider = "local"
+#
+# model = "mistral-7b-instruct"
+# temperature = 0.5
+# max_output_tokens = 800
+#
+# base_url = "http://localhost:8080/v1"  # Different local server
+# api_key = "dummy"
+#
+# strategy_hint = """
+# Rush strategy:
+# 1. Train 5 workers maximum
+# 2. Build barracks immediately
+# 3. Constant military production
+# 4. Attack at minute 3
+# """
+
+# ============================================================================
+# CONTROLLING NUMBER OF LLM PLAYERS
+# ============================================================================
+#
+# Use the "enabled" flag to control how many LLM agents participate:
+#
+# 1. LLM vs AI (most common for testing):
+#    [players.openai_p1]
+#    enabled = true    # OpenAI controls Player 1
+#
+#    [players.grok_p2]
+#    enabled = false   # Player 2 uses built-in 0 A.D. AI
+#
+# 2. LLM vs LLM:
+#    [players.openai_p1]
+#    enabled = true    # OpenAI controls Player 1
+#
+#    [players.grok_p2]
+#    enabled = true    # Grok controls Player 2
+#
+# 3. Multiple disabled (AI vs AI with monitoring):
+#    enabled = false for all players
+#    Script will just monitor the game
+#
+# ============================================================================
+# SKILLS REFERENCE
+# ============================================================================
+# The agent can use actions described in skills/ directory:
+#
+# - skills/openenv-actions.md: evaluate, push_command basics
+# - skills/cookbook-gameplay.md: movement, combat, economy, building
+# - skills/debugging-playbook.md: troubleshooting commands
+#
+# Agents receive summarized game state with:
+# - Entity IDs for their units/buildings
+# - Positions and template types
+# - Current game time/step
+#
+# Agents should output JSON with this schema:
+# {
+#   "actions": [
+#     {
+#       "op": "push_command",
+#       "player_id": 1,
+#       "cmd": {
+#         "type": "walk",
+#         "entities": [123, 124],
+#         "x": 600,
+#         "z": 650,
+#         "queued": false,
+#         "pushFront": true
+#       }
+#     }
+#   ]
+# }

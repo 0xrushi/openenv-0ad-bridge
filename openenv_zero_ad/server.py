@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+"""FastAPI server exposing an OpenEnv-shaped API for 0 A.D.
+
+This server wraps a single `ZeroADSession` and exposes endpoints:
+- POST /reset
+- POST /step
+- GET  /state
+- GET  /schema
+- GET  /health
+- WS   /ws
+"""
+
 import json
 import os
 from typing import Any, Dict, Optional
@@ -47,8 +58,21 @@ def create_app(
 
     @app.post("/step", response_model=StepResponse)
     async def step(request: StepRequest) -> StepResponse:
-        obs = session.step(request.action, timeout_s=request.timeout_s)
-        return StepResponse(observation=obs, reward=None, done=False)
+        try:
+            obs = session.step(request.action, timeout_s=request.timeout_s)
+            return StepResponse(observation=obs, reward=None, done=False)
+        except Exception as e:
+            # Check for Pydantic validation error (can come from TypeAdapter)
+            if "ValidationError" in type(e).__name__:
+                from fastapi import HTTPException
+
+                raise HTTPException(status_code=422, detail=str(e))
+
+            import traceback
+
+            traceback.print_exc()
+            print(f"ERROR processing step: {e}")
+            raise
 
     @app.get("/state", response_model=ZeroADState)
     async def state() -> ZeroADState:

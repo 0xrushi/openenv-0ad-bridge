@@ -1,0 +1,50 @@
+# Example: Google Gemini vs OpenAI
+# Battle between Google's Gemini and OpenAI's GPT-4o
+
+[match]
+openenv_base = "http://127.0.0.1:8001"
+state_file = "run/latest_state.json"
+decision_interval_s = 1.0
+max_actions_per_decision = 3
+max_entities_in_summary = 50
+
+log_decisions = true
+log_file = "run/gemini_vs_openai.jsonl"
+
+[players.gemini]
+enabled = true
+player_id = 1
+name = "Gemini-Pro"
+provider = "gemini"
+model = "gemini-2.0-flash-exp"  # or "gemini-1.5-pro", "gemini-1.5-flash"
+temperature = 0.3
+max_output_tokens = 800
+
+# Gemini API key (get from https://aistudio.google.com/app/apikey)
+# Set environment variable: export GEMINI_API_KEY=...
+api_key_env = "GEMINI_API_KEY"
+
+strategy_hint = """
+Efficient strategy:
+1. Strong economy: 12-15 workers
+2. Research technologies early
+3. Build defensive structures
+4. Counter-attack with superior forces
+"""
+
+[players.openai]
+enabled = true
+player_id = 2
+name = "GPT-4o"
+provider = "openai"
+model = "gpt-4o"
+temperature = 0.2
+max_output_tokens = 800
+
+strategy_hint = """
+Balanced strategy:
+1. 10 workers for economy
+2. Early military production
+3. Scout and control resources
+4. Attack with 15+ units
+"""

@@ -1,0 +1,46 @@
+# Example: Grok vs OpenAI
+# Battle between xAI's Grok and OpenAI's GPT-4o
+
+[match]
+openenv_base = "http://127.0.0.1:8001"
+state_file = "run/latest_state.json"
+decision_interval_s = 1.0
+max_actions_per_decision = 3
+max_entities_in_summary = 50
+
+log_decisions = true
+log_file = "run/grok_vs_openai.jsonl"
+
+[players.grok]
+enabled = true  # Set to false to disable
+player_id = 1
+name = "Grok-Beta"
+provider = "grok"
+model = "grok-beta"
+temperature = 0.3
+max_output_tokens = 800
+
+strategy_hint = """
+Tech-focused strategy:
+1. Strong economy: 12-15 workers
+2. Research all phase advances quickly
+3. Build defensive structures (walls, towers)
+4. Late-game siege weapons for victory
+"""
+
+[players.openai]
+enabled = true  # Set to false to disable
+player_id = 2
+name = "GPT-4o"
+provider = "openai"
+model = "gpt-4o"
+temperature = 0.2
+max_output_tokens = 800
+
+strategy_hint = """
+Expansion strategy:
+1. 10 workers for balanced economy
+2. Scout and control map resources
+3. Multiple production buildings
+4. Diverse army composition (melee + ranged)
+"""

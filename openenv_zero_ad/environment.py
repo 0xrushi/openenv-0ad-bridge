@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+"""OpenEnv-format session logic for proxying to 0 A.D. RL interface.
+
+`ZeroADSession` provides:
+- `/reset`: reset local episode state (does not restart the match)
+- `/step`: proxy low-level `push_command` and `evaluate` actions
+
+It also performs best-effort validation of entity ids for `push_command` so
+client mistakes fail fast with a clear error.
+"""
+
 import json
 import os
 import threading

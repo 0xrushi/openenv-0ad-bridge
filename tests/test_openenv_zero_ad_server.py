@@ -1,3 +1,8 @@
+"""Unit tests for the OpenEnv proxy HTTP server.
+
+These tests mock the underlying RL client so they can run without 0 A.D.
+"""
+
 import unittest
 from unittest.mock import Mock
 

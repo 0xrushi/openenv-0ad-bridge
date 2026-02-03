@@ -1,0 +1,53 @@
+# Example: Local Model vs Local Model
+# Test different local models against each other
+# Useful for benchmarking without API costs
+
+[match]
+openenv_base = "http://127.0.0.1:8001"
+state_file = "run/latest_state.json"
+decision_interval_s = 0.5  # Faster since both are local
+max_actions_per_decision = 4
+max_entities_in_summary = 60
+
+log_decisions = true
+log_file = "run/local_vs_local.jsonl"
+
+# Player 1: Llama-3 70B (stronger, slower)
+[players.llama_70b]
+enabled = true  # Set to false to disable
+player_id = 1
+name = "Llama-3-70B"
+provider = "local"
+model = "llama-3-70b-instruct"
+base_url = "http://localhost:1234/v1"
+api_key = "dummy"
+temperature = 0.3
+max_output_tokens = 1000
+
+strategy_hint = """
+Adaptive strategy:
+1. Analyze opponent's moves
+2. Counter their unit composition
+3. Maintain economic advantage
+4. Strike when they're vulnerable
+"""
+
+# Player 2: Mistral 7B (faster, smaller)
+[players.mistral_7b]
+enabled = true  # Set to false to disable
+player_id = 2
+name = "Mistral-7B"
+provider = "local"
+model = "mistral-7b-instruct"
+base_url = "http://localhost:8080/v1"
+api_key = "dummy"
+temperature = 0.4
+max_output_tokens = 800
+
+strategy_hint = """
+Fast rush strategy:
+1. Minimal workers (4-5)
+2. Immediate barracks
+3. Non-stop unit production
+4. Constant pressure on enemy
+"""

@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+"""Pydantic models for the 0 A.D. OpenEnv proxy.
+
+These models define the public request/response shapes exposed by
+`openenv_zero_ad.server`.
+
+The action space is intentionally low-level:
+- `push_command`: inject a Simulation2 command dict (validated by the proxy)
+- `evaluate`: run a JS snippet inside the simulation
+"""
+
 from typing import Any, Dict, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field

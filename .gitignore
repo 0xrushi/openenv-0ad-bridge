@@ -24,3 +24,4 @@ source/simulation/ai/hannibal/rpc.js
 ## logs/*
 
 last.log
+run/*

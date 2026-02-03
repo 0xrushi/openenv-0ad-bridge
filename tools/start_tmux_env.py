@@ -56,10 +56,22 @@ def _split(target, vertical: bool):
 
 
 def _pick_free_port(host: str, preferred: int, max_tries: int = 50) -> int:
-    """Pick a free TCP port starting at preferred."""
+    """Pick a free TCP port starting at preferred.
+
+    We avoid ports that already have a listener, even if it's not our server.
+    This is intentionally conservative to prevent uvicorn bind failures.
+    """
 
     port = preferred
     for _ in range(max_tries):
+        # If something is already listening, skip.
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.settimeout(0.2)
+            if probe.connect_ex((host, port)) == 0:
+                port += 1
+                continue
+
+        # Try binding to confirm it's available.
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:

@@ -1,0 +1,111 @@
+# Google Gemini LLM vs Built-in 0 A.D. AI
+# Simple 1v1 match with only Gemini agent
+
+[match]
+openenv_base = "http://127.0.0.1:8001"
+state_file = "run/latest_state.json"
+decision_interval_s = 1.5
+max_actions_per_decision = 3
+max_entities_in_summary = 50
+
+# Optional: Enable logging
+log_decisions = true
+log_file = "run/gemini_vs_ai.jsonl"
+
+# ============================================================================
+# PLAYER 1: Google Gemini (Enabled)
+# ============================================================================
+[players.gemini]
+enabled = true  # Set to false to disable this player
+player_id = 1
+name = "Gemini-3.0-Flash"
+provider = "gemini"
+
+# Gemini model configuration
+# Available models:
+#   - gemini-2.0-flash (latest, fast, recommended)
+#   - gemini-2.0-flash-001 (stable version 001)
+#   - gemini-1.5-pro (most capable, slower)
+#   - gemini-1.5-flash (fast, efficient)
+model = "gemini-2.0-flash"  # Switch to stable model
+temperature = 0.3
+max_output_tokens = 4096  # Maximum for better response completion
+
+# Get your API key from: https://aistudio.google.com/app/apikey
+# Option 1: Set directly in config (convenient but less secure)
+api_key = "1234"
+
+# Option 2: Use environment variable (more secure)
+# api_key_env = "GEMINI_API_KEY"
+# Then set: export GEMINI_API_KEY=your-key-here
+
+# Strategy for this agent
+strategy_hint = """
+You are playing as Player 1 against the built-in 0 A.D. AI using Google Gemini.
+
+Strategy:
+1. Early economy: Train 10-12 workers (female citizens)
+2. Resource balance:
+   - 40% food (farms, hunting, berries)
+   - 30% wood (trees near base)
+   - 20% stone (for buildings)
+   - 10% metal (for units)
+3. Build order:
+   - Houses for population (keep 5+ pop space)
+   - Barracks by minute 4
+   - Farmstead for food production
+4. Military composition:
+   - 60% spearmen (strong vs cavalry)
+   - 40% archers (ranged damage)
+5. Scouting:
+   - Send 1-2 cavalry to find enemy base
+   - Identify their strategy
+6. Attack timing:
+   - Push when you have 15+ military units
+   - Keep producing units during battle
+7. Economic expansion:
+   - Keep training workers even during military phase
+   - Target: 20 workers by minute 10
+
+Key commands you can use:
+- walk: Move units
+- gather: Collect resources
+- train: Produce units
+- construct: Build structures
+- attack: Engage enemies
+- attack-walk: Move and auto-attack
+
+Remember: Entity IDs change each game - always use IDs from the current observation!
+"""
+
+# ============================================================================
+# PLAYER 2: Built-in AI (Disabled)
+# ============================================================================
+# This player will be controlled by 0 A.D.'s built-in AI
+# No LLM agent needed - just mark as disabled
+
+[players.ai_player]
+enabled = false  # Disabled - uses built-in 0 A.D. AI
+player_id = 2
+name = "0AD-AI"
+
+# Note: When enabled=false, all other settings are ignored
+# The game's built-in AI will control this player automatically
+# Configure AI difficulty when starting the game in 0 A.D.
+
+# ============================================================================
+# Quick Start Instructions
+# ============================================================================
+# 1. Get Gemini API key: https://aistudio.google.com/app/apikey
+# 2. Set environment variable:
+#    export GEMINI_API_KEY=your-key-here
+# 3. Ensure game services are running:
+#    - 0 A.D. with RL interface (Terminal A)
+#    - Stepper writing state snapshots (Terminal B)
+#    - OpenEnv proxy server (Terminal C)
+# 4. Run this match:
+#    python tools/multi_provider_match.py --config configs/gemini_vs_ai.toml
+#
+# Or use the interactive launcher:
+#    bash tools/run_example_match.sh
+#    # Select the gemini_vs_ai option

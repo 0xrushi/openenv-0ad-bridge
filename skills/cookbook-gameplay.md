@@ -97,6 +97,16 @@ curl -sS -X POST "$API_BASE/step" -H 'content-type: application/json' \
 
 ## Economy Commands
 
+### Find nearest wood (no dedicated API call)
+
+There is no single built-in API endpoint like `nearest_wood(worker_id)`.
+
+Instead, use the omniscient snapshot written by the stepper and select the nearest tree in your client.
+
+Helper script:
+
+- `tools/gather_nearest_wood.py`
+
 ### Gather Resources
 
 Requires target entity ID (tree, mine, berries):

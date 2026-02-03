@@ -1,0 +1,76 @@
+# OpenAI LLM vs Built-in 0 A.D. AI
+# Simple 1v1 match with only one LLM agent
+
+[match]
+openenv_base = "http://127.0.0.1:8001"
+state_file = "run/latest_state.json"
+decision_interval_s = 1.5
+max_actions_per_decision = 3
+max_entities_in_summary = 50
+
+# Optional: Enable logging
+log_decisions = true
+log_file = "run/openai_vs_ai.jsonl"
+
+# ============================================================================
+# PLAYER 1: OpenAI LLM (Enabled)
+# ============================================================================
+[players.openai]
+enabled = true  # Set to false to disable this player
+player_id = 1
+name = "OpenAI-GPT4o"
+provider = "openai"
+
+# Model configuration
+model = "gpt-4o"  # or "gpt-4", "gpt-3.5-turbo", "gpt-4-turbo"
+temperature = 0.3
+max_output_tokens = 800
+
+# Strategy for this agent
+strategy_hint = """
+You are playing as Player 1 against the built-in 0 A.D. AI.
+
+Strategy:
+1. Economy first: Train 8-10 workers (female citizens)
+2. Resource gathering: Focus on food and wood early
+3. Build order:
+   - Houses for population cap
+   - Barracks by minute 4
+4. Military: Mix of spearmen and archers
+5. Scout early to find enemy base
+6. Attack when you have 12-15 military units
+7. Keep producing workers while fighting
+
+Remember to use entity IDs from the observation - they change each game!
+"""
+
+# ============================================================================
+# PLAYER 2: Built-in AI (Disabled)
+# ============================================================================
+# This player will be controlled by 0 A.D.'s built-in AI
+# No LLM agent needed - just mark as disabled
+
+[players.ai_player]
+enabled = false  # Disabled - uses built-in 0 A.D. AI
+player_id = 2
+name = "0AD-AI"
+
+# Note: When enabled=false, all other settings are ignored
+# The game's built-in AI will control this player automatically
+# You configure the AI difficulty when starting the game in 0 A.D.
+
+# ============================================================================
+# Alternative: Enable for LLM vs LLM
+# ============================================================================
+# To switch to OpenAI vs Grok, set both enabled=true:
+#
+# [players.openai]
+# enabled = true
+# ...
+#
+# [players.grok]
+# enabled = true
+# player_id = 2
+# provider = "grok"
+# model = "grok-beta"
+# ...
