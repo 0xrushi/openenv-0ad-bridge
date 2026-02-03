@@ -81,3 +81,12 @@ python -m pip install libtmux
 python tools/start_tmux_env.py
 tmux attach -t zero-ad
 ```
+
+
+## Acknowledgements
+
+This project borrows heavily from existing open-source work:
+
+- [OpenEnv](https://github.com/meta-pytorch/OpenEnv) for the clean, agent-friendly `/reset` + `/step` shape and the overall “env server/client” mental model.
+- [Hannibal](https://github.com/agentx-cgn/Hannibal) for inspiration from prior RTS AI engineering around 0 A.D.
+
