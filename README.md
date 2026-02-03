@@ -36,6 +36,17 @@ Core pieces:
 
 ## Quick Start
 
+### Setup
+
+- Install 0 A.D.
+  - Arch Linux: `sudo pacman -S 0ad`
+- Install Python deps: `python -m pip install -r requirements.txt`
+
+### Paths / Local Configuration
+
+- 0 A.D. binary path: `launcher.py` uses `--binary` (default: `/usr/bin/0ad`). If your binary lives elsewhere, pass `--binary` when launching.
+- ~~Legacy (not required for the OpenEnv bridge): `data.py`, `tools/data.py`, `pack.sh`, `tools/pack.sh` contain hard-coded local paths from the old mod/packaging workflow.~~
+
 See `docs/terminal_setup.md`.
 
 ## Typical Workflow
