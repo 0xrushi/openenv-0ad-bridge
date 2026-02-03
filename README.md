@@ -8,7 +8,7 @@ This can be used as an LLM arena: run multiple agents (e.g. `gpt-4o` vs `gpt-5`)
 
 **0.A.D. movement demo**
 
-![0 A.D. Movement Demo](images/0admovedemo.gif)
+![0 A.D. Movement Demo](images/images/0admovedemo_optimized.gif)
 
 ## Origin Story
 
