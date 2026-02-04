@@ -70,7 +70,7 @@ def test_provider(
         if api_key is None:
             api_key = os.environ.get("GEMINI_API_KEY")
         if model == "auto":
-            model = "gemini-2.0-flash-exp"
+            model = "gemini-3-flash-preview"
 
     elif provider == "local":
         if base_url is None:

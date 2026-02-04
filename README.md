@@ -10,6 +10,12 @@ This can be used as an LLM arena: run multiple agents (e.g. `gpt-4o` vs `gpt-5`)
 
 ![0 A.D. Movement Demo](images/0admovedemo_optimized.gif)
 
+
+
+**Video demo (basic agent thinking and movements; issues of context length leading to errors)**
+
+[![Video: basic agent thinking and movements](https://img.youtube.com/vi/qCLUHdn229w/maxresdefault.jpg)](https://youtu.be/qCLUHdn229w)
+
 ## Origin Story
 
 I first prototyped this concept on an open-source Age of Empires-style engine:
@@ -44,7 +50,7 @@ Core pieces:
 
 ### Paths / Local Configuration
 
-- 0 A.D. binary path: `launcher.py` uses `--binary` (default: `/usr/bin/0ad`). If your binary lives elsewhere, pass `--binary` when launching.
+- 0 A.D. binary path: `launcher.py` uses `--binary` (default: `pyrogenesis` and will try common paths like `/usr/bin/pyrogenesis` and `/usr/games/pyrogenesis`). If your binary lives elsewhere, pass `--binary` when launching.
 - ~~Legacy (not required for the OpenEnv bridge): `data.py`, `tools/data.py`, `pack.sh`, `tools/pack.sh` contain hard-coded local paths from the old mod/packaging workflow.~~
 
 See `docs/terminal_setup.md`.
@@ -117,8 +123,10 @@ docker compose down
 1) Launch 0 A.D. with RL interface:
 
 ```bash
-ZEROAD_RL_INTERFACE=127.0.0.1:6000 python launcher.py --map="scenarios/arcadia"
+ZEROAD_RL_INTERFACE=127.0.0.1:6000 python launcher.py
 ```
+
+Defaults: launches `scenarios/arcadia` (Player 1 civ `athen`). To use another scenario, pass `--map=...` and also set `--civ`/`ZEROAD_CIV` to something other than `athen`.
 
 2) Run the stepper (required for `--rl-interface`):
 
@@ -168,6 +176,6 @@ tmux attach -t zero-ad
 ## Acknowledgements
 
 This project borrows heavily from existing open-source work:
-
+- [0 A.D.] (https://gitea.wildfiregames.com/)
 - [OpenEnv](https://github.com/meta-pytorch/OpenEnv)
 - [Hannibal](https://github.com/agentx-cgn/Hannibal)

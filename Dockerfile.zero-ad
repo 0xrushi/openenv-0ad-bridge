@@ -9,6 +9,7 @@ RUN apt-get update \
       bash \
       ca-certificates \
       openbox \
+      python3-xdg \
       novnc \
       websockify \
       xvfb \
@@ -24,5 +25,11 @@ RUN useradd -m -u 1000 -s /bin/bash zeroad
 WORKDIR /app
 COPY . /app
 RUN chown -R zeroad:zeroad /app
+
+# Install local 0 A.D. mod overrides (loaded via launcher.py).
+RUN if [ -d /app/mods/openenv_fix ]; then \
+      rm -rf /usr/share/games/0ad/mods/openenv_fix && \
+      cp -R /app/mods/openenv_fix /usr/share/games/0ad/mods/openenv_fix; \
+    fi
 
 EXPOSE 5900 6080

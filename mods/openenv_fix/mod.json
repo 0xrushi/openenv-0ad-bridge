@@ -1,0 +1,8 @@
+{
+	"name": "openenv_fix",
+	"version": "0.0.1",
+	"label": "OpenEnv Fix",
+	"url": "",
+	"description": "Small runtime fixes for running 0 A.D. via openenv-0ad-bridge.",
+	"dependencies": []
+}

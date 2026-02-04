@@ -34,6 +34,7 @@ import json
 import os
 import time
 import urllib.request
+import urllib.error
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -44,12 +45,41 @@ from pydantic import BaseModel, Field, ConfigDict
 
 
 # ============================================================================
+# Terminal Colors
+# ============================================================================
+
+
+class Colors:
+    """ANSI color codes for terminal output"""
+
+    PINK = "\033[95m"
+    CYAN = "\033[96m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    RED = "\033[91m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
+    END = "\033[0m"
+
+
+def print_reasoning(agent_name: str, reasoning: str) -> None:
+    """Print agent reasoning in pink color."""
+    if not reasoning:
+        return
+    print(f"{Colors.PINK}{Colors.BOLD}[{agent_name} Reasoning]{Colors.END}")
+    print(f"{Colors.PINK}{reasoning}{Colors.END}")
+
+
+# ============================================================================
 # HTTP Utilities
 # ============================================================================
 
 
 def _http_post_json(
-    url: str, payload: Dict[str, Any], headers: Optional[Dict[str, str]] = None, timeout_s: float = 10.0
+    url: str,
+    payload: Dict[str, Any],
+    headers: Optional[Dict[str, str]] = None,
+    timeout_s: float = 10.0,
 ) -> Dict[str, Any]:
     """Post JSON payload and return JSON response."""
     data = json.dumps(payload).encode("utf-8")
@@ -58,9 +88,36 @@ def _http_post_json(
         req_headers.update(headers)
 
     req = urllib.request.Request(url, data=data, headers=req_headers, method="POST")
-    with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310
-        raw = resp.read().decode("utf-8")
-    return json.loads(raw)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310
+            raw = resp.read().decode("utf-8", errors="replace")
+        return json.loads(raw)
+    except urllib.error.HTTPError as e:
+        # Surface provider error bodies (e.g., invalid model, missing scopes, bad params).
+        # urllib raises HTTPError for non-2xx, but the response body often contains the real reason.
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            body = ""
+
+        detail = body.strip()
+        if detail:
+            # Prefer a compact JSON rendering if possible.
+            try:
+                detail_obj = json.loads(detail)
+                detail = json.dumps(detail_obj, ensure_ascii=False)
+            except Exception:
+                # Keep as plain text
+                pass
+
+            # Avoid spewing huge payloads into the terminal.
+            if len(detail) > 2000:
+                detail = detail[:2000] + "…(truncated)"
+
+            raise RuntimeError(f"HTTP Error {e.code}: {e.reason} - {detail}") from e
+
+        raise RuntimeError(f"HTTP Error {e.code}: {e.reason}") from e
 
 
 # ============================================================================
@@ -101,6 +158,7 @@ def _summarize_state(
     Includes:
     - Current step and game time
     - Entities for each player (id, position, template)
+    - Nearby resources (trees, mines, berries) per player
     - Limited to max_entities per player
     """
     state = snapshot.get("state") if isinstance(snapshot, dict) else None
@@ -116,14 +174,61 @@ def _summarize_state(
     if isinstance(players_list, list):
         # Map 0 A.D. player index (0=Gaia, 1=Player1, etc.) to info
         for idx, pdata in enumerate(players_list):
-             if not isinstance(pdata, dict):
-                 continue
-             players_info[idx] = {
-                 "resources": pdata.get("resourceCounts"),
-                 "pop": pdata.get("popCount"),
-                 "popLimit": pdata.get("popLimit"),
-                 "civ": pdata.get("civ"),
-             }
+            if not isinstance(pdata, dict):
+                continue
+            players_info[idx] = {
+                "resources": pdata.get("resourceCounts"),
+                "pop": pdata.get("popCount"),
+                "popLimit": pdata.get("popLimit"),
+                "civ": pdata.get("civ"),
+            }
+
+    # Collect resources (owned by Gaia - player 0)
+    resources: List[Dict[str, Any]] = []
+    for sid, ent in entities.items():
+        if not isinstance(ent, dict):
+            continue
+        if ent.get("owner") != 0:  # Gaia owns resources
+            continue
+        template = ent.get("template", "")
+        # Check if it's a resource entity
+        if any(
+            res_type in template.lower()
+            for res_type in [
+                "tree",
+                "wood",
+                "mine",
+                "metal",
+                "stone",
+                "berries",
+                "food",
+                "fruit",
+            ]
+        ):
+            pos = ent.get("position")
+            if pos and isinstance(pos, dict) and "x" in pos and "z" in pos:
+                resources.append(
+                    {
+                        "id": int(sid) if str(sid).isdigit() else sid,
+                        "pos": pos,
+                        "template": template,
+                    }
+                )
+
+    # Extract map bounds if available
+    map_bounds = None
+    terrain = state.get("terrain")
+    if isinstance(terrain, dict):
+        width = terrain.get("width")
+        height = terrain.get("height")
+        if width and height:
+            # 0 A.D. uses x and z coordinates
+            map_bounds = {
+                "min_x": 0,
+                "max_x": width,
+                "min_z": 0,
+                "max_z": height,
+            }
 
     out: Dict[str, Any] = {
         "step": snapshot.get("step"),
@@ -131,6 +236,9 @@ def _summarize_state(
         "players": {},
         "global_players": players_info,  # Add global player stats
     }
+
+    if map_bounds:
+        out["map_bounds"] = map_bounds
 
     for pid in player_ids:
         lst: List[Dict[str, Any]] = []
@@ -140,18 +248,139 @@ def _summarize_state(
             if ent.get("owner") != pid:
                 continue
             pos = ent.get("position")
-            lst.append(
-                {
-                    "id": int(sid) if str(sid).isdigit() else sid,
-                    "pos": pos,
-                    "template": ent.get("template"),
-                    "hitpoints": ent.get("hitpoints"),
-                    "maxHitpoints": ent.get("maxHitpoints"),
-                }
-            )
+
+            # Extract production/research queue info if available
+            production_queue = None
+            research_queue = None
+            garrison_info = None
+
+            # Check for ProductionQueue component
+            if "productionQueue" in ent:
+                pq = ent.get("productionQueue")
+                if isinstance(pq, dict) and "queue" in pq:
+                    queue = pq.get("queue", [])
+                    if queue:
+                        production_queue = [
+                            {
+                                "template": item.get("unitTemplate")
+                                or item.get("template"),
+                                "progress": item.get("progress"),
+                                "count": item.get("count", 1),
+                            }
+                            for item in queue[:3]  # Limit to first 3 items
+                        ]
+
+            # Check for research queue
+            if "researcher" in ent or "researchQueue" in ent:
+                rq = ent.get("researchQueue") or ent.get("researcher", {})
+                if isinstance(rq, dict):
+                    current = rq.get("currentTech") or rq.get("researching")
+                    if current:
+                        research_queue = {
+                            "current": current,
+                            "progress": rq.get("progress"),
+                        }
+
+            # Check for garrison holder
+            if "garrisonHolder" in ent:
+                gh = ent.get("garrisonHolder")
+                if isinstance(gh, dict):
+                    garrisoned = gh.get("entities", [])
+                    if garrisoned:
+                        garrison_info = {
+                            "count": len(garrisoned),
+                            "capacity": gh.get("capacity"),
+                        }
+
+            entity_data = {
+                "id": int(sid) if str(sid).isdigit() else sid,
+                "pos": pos,
+                "template": ent.get("template"),
+                "hitpoints": ent.get("hitpoints"),
+                "maxHitpoints": ent.get("maxHitpoints"),
+            }
+
+            # Add optional fields if present
+            if production_queue:
+                entity_data["production_queue"] = production_queue
+            if research_queue:
+                entity_data["research_queue"] = research_queue
+            if garrison_info:
+                entity_data["garrison"] = garrison_info
+
+            lst.append(entity_data)
             if len(lst) >= max_entities:
                 break
-        out["players"][str(pid)] = {"entities": lst, "entity_count": len(lst)}
+
+        # Find nearby resources for this player (within reasonable distance)
+        nearby_resources = []
+        enemy_entities = []
+        if lst:  # If player has entities
+            # Get average position of player's entities
+            valid_positions = [
+                e["pos"] for e in lst if e.get("pos") and isinstance(e["pos"], dict)
+            ]
+            if valid_positions:
+                avg_x = sum(p.get("x", 0) for p in valid_positions) / len(
+                    valid_positions
+                )
+                avg_z = sum(p.get("z", 0) for p in valid_positions) / len(
+                    valid_positions
+                )
+
+                # Find closest resources (limit to 20 for token efficiency)
+                for res in resources:
+                    res_pos = res.get("pos", {})
+                    if not isinstance(res_pos, dict):
+                        continue
+                    rx = res_pos.get("x", 0)
+                    rz = res_pos.get("z", 0)
+                    dist_sq = (rx - avg_x) ** 2 + (rz - avg_z) ** 2
+                    nearby_resources.append((dist_sq, res))
+
+                nearby_resources.sort(key=lambda x: x[0])
+                nearby_resources = [res for _, res in nearby_resources[:20]]
+
+                # Find nearby enemy entities (not owned by current player or Gaia)
+                for sid, ent in entities.items():
+                    if not isinstance(ent, dict):
+                        continue
+                    enemy_owner = ent.get("owner")
+                    if (
+                        enemy_owner == pid or enemy_owner == 0
+                    ):  # Skip own entities and Gaia
+                        continue
+                    enemy_pos = ent.get("position")
+                    if not enemy_pos or not isinstance(enemy_pos, dict):
+                        continue
+                    ex = enemy_pos.get("x", 0)
+                    ez = enemy_pos.get("z", 0)
+                    dist_sq = (ex - avg_x) ** 2 + (ez - avg_z) ** 2
+                    enemy_entities.append(
+                        (
+                            dist_sq,
+                            {
+                                "id": int(sid) if str(sid).isdigit() else sid,
+                                "pos": enemy_pos,
+                                "template": ent.get("template"),
+                                "owner": enemy_owner,
+                                "hitpoints": ent.get("hitpoints"),
+                                "maxHitpoints": ent.get("maxHitpoints"),
+                            },
+                        )
+                    )
+
+                enemy_entities.sort(key=lambda x: x[0])
+                enemy_entities = [
+                    ent for _, ent in enemy_entities[:15]
+                ]  # Limit to 15 for token efficiency
+
+        out["players"][str(pid)] = {
+            "entities": lst,
+            "entity_count": len(lst),
+            "nearby_resources": nearby_resources,
+            "nearby_enemies": enemy_entities,
+        }
 
     return out
 
@@ -163,30 +392,44 @@ def _summarize_state(
 
 class GameCommand(BaseModel):
     """A single game command (walk, attack, gather, etc.)"""
-    type: str = Field(..., description="Command type (walk, attack, gather, train, etc.)")
+
+    type: str = Field(
+        ..., description="Command type (walk, attack, gather, train, etc.)"
+    )
     entities: Optional[List[int]] = Field(None, description="Entity IDs to command")
-    entity: Optional[int] = Field(None, description="Single entity ID (for research, etc.)")
+    entity: Optional[int] = Field(
+        None, description="Single entity ID (for research, etc.)"
+    )
     x: Optional[float] = Field(None, description="X coordinate")
     z: Optional[float] = Field(None, description="Z coordinate")
     target: Optional[int] = Field(None, description="Target entity ID")
     queued: Optional[bool] = Field(False, description="Whether to queue the command")
     pushFront: Optional[bool] = Field(None, description="Push to front of queue")
-    template: Optional[str] = Field(None, description="Template name for construct/train")
+    template: Optional[str] = Field(
+        None, description="Template name for construct/train"
+    )
     count: Optional[int] = Field(None, description="Count for train command")
     angle: Optional[float] = Field(None, description="Angle for construct")
     allowCapture: Optional[bool] = Field(None, description="Allow capturing buildings")
-    targetClasses: Optional[Dict[str, List[str]]] = Field(None, description="Target classes for attack-walk")
+    targetClasses: Optional[Dict[str, List[str]]] = Field(
+        None, description="Target classes for attack-walk"
+    )
     name: Optional[str] = Field(None, description="Name for stance/formation")
     autocontinue: Optional[bool] = Field(None, description="Auto-continue for repair")
     garrisonHolder: Optional[int] = Field(None, description="Garrison holder entity ID")
-    garrisonHolders: Optional[List[int]] = Field(None, description="Garrison holder entity IDs")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Metadata for train command")
+    garrisonHolders: Optional[List[int]] = Field(
+        None, description="Garrison holder entity IDs"
+    )
+    metadata: Optional[Dict[str, Any]] = Field(
+        None, description="Metadata for train command"
+    )
 
     model_config = ConfigDict(extra="allow")  # Allow additional fields for flexibility
 
 
 class GameAction(BaseModel):
     """A single OpenEnv action"""
+
     op: Literal["push_command", "evaluate"] = Field(..., description="Operation type")
     player_id: Optional[int] = Field(None, description="Player ID (for push_command)")
     cmd: Optional[GameCommand] = Field(None, description="Command (for push_command)")
@@ -195,12 +438,19 @@ class GameAction(BaseModel):
 
 class GameActions(BaseModel):
     """Container for multiple game actions"""
-    actions: List[GameAction] = Field(default_factory=list, description="List of actions to execute")
+
+    reasoning: Optional[str] = Field(
+        None, description="Step-by-step reasoning process (optional)"
+    )
+    actions: List[GameAction] = Field(
+        default_factory=list, description="List of actions to execute"
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [
                 {
+                    "reasoning": "Step 1: Checked resources - food is low (45). Step 2: Population OK (8/20). Step 3: Found berries nearby. Decision: Send workers to gather food.",
                     "actions": [
                         {
                             "op": "push_command",
@@ -211,10 +461,10 @@ class GameActions(BaseModel):
                                 "x": 600,
                                 "z": 650,
                                 "queued": False,
-                                "pushFront": True
-                            }
+                                "pushFront": True,
+                            },
                         }
-                    ]
+                    ],
                 }
             ]
         }
@@ -275,6 +525,7 @@ def _json_extract(s: str) -> Optional[Dict[str, Any]]:
 @dataclass
 class AgentConfig:
     """Configuration for a single agent/player."""
+
     key: str
     player_id: int
     name: str
@@ -295,11 +546,15 @@ def _get_provider_config(provider: str, config: Dict[str, Any]) -> tuple[str, st
         (base_url, api_key)
     """
     if provider == "openai":
-        base_url = config.get("base_url") or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        base_url = config.get("base_url") or os.environ.get(
+            "OPENAI_BASE_URL", "https://api.openai.com/v1"
+        )
         api_key_env = config.get("api_key_env", "OPENAI_API_KEY")
         api_key = config.get("api_key") or os.environ.get(api_key_env)
         if not api_key:
-            raise RuntimeError(f"API key not found: set {api_key_env} environment variable")
+            raise RuntimeError(
+                f"API key not found: set {api_key_env} environment variable"
+            )
         return base_url.rstrip("/"), api_key
 
     elif provider == "grok":
@@ -307,21 +562,29 @@ def _get_provider_config(provider: str, config: Dict[str, Any]) -> tuple[str, st
         api_key_env = config.get("api_key_env", "XAI_API_KEY")
         api_key = config.get("api_key") or os.environ.get(api_key_env)
         if not api_key:
-            raise RuntimeError(f"Grok API key not found: set {api_key_env} environment variable")
+            raise RuntimeError(
+                f"Grok API key not found: set {api_key_env} environment variable"
+            )
         return base_url.rstrip("/"), api_key
 
     elif provider == "gemini":
         # Gemini uses OpenAI-compatible API via Google AI Studio
-        base_url = config.get("base_url", "https://generativelanguage.googleapis.com/v1beta/openai")
+        base_url = config.get(
+            "base_url", "https://generativelanguage.googleapis.com/v1beta/openai"
+        )
         api_key_env = config.get("api_key_env", "GEMINI_API_KEY")
         api_key = config.get("api_key") or os.environ.get(api_key_env)
         if not api_key:
-            raise RuntimeError(f"Gemini API key not found: set {api_key_env} environment variable")
+            raise RuntimeError(
+                f"Gemini API key not found: set {api_key_env} environment variable"
+            )
         return base_url.rstrip("/"), api_key
 
     elif provider == "local":
         base_url = config.get("base_url", "http://localhost:1234/v1")
-        api_key = config.get("api_key", "not-needed")  # Local servers often don't need real keys
+        api_key = config.get(
+            "api_key", "not-needed"
+        )  # Local servers often don't need real keys
         return base_url.rstrip("/"), api_key
 
     else:
@@ -374,8 +637,8 @@ def _llm_chat(
                     "json_schema": {
                         "name": "game_actions",
                         "strict": True,
-                        "schema": schema
-                    }
+                        "schema": schema,
+                    },
                 }
             # Grok uses json_object mode
             elif agent.provider == "grok":
@@ -410,7 +673,9 @@ def _llm_chat(
             usage = resp["usage"]
             completion_tokens = usage.get("completion_tokens", 0)
             if completion_tokens >= payload["max_tokens"] * 0.9:
-                print(f"  Warning: Used {completion_tokens}/{payload['max_tokens']} tokens (90%+)")
+                print(
+                    f"  Warning: Used {completion_tokens}/{payload['max_tokens']} tokens (90%+)"
+                )
 
         return resp["choices"][0]["message"]["content"]
     except Exception as e:
@@ -443,10 +708,35 @@ def _load_skills_knowledge() -> str:
 _SKILLS_KNOWLEDGE = _load_skills_knowledge()
 
 
+def _load_notebook_knowledge() -> Dict[str, List[Dict[str, str]]]:
+    """Load optional civ-specific notebook notes.
+
+    Returned shape: {civ_code: [{"path": "...", "content": "..."}, ...]}
+    """
+
+    root = Path("notebook")
+    out: Dict[str, List[Dict[str, str]]] = {}
+
+    athen_dir = root / "athenian"
+    if athen_dir.exists():
+        items: List[Dict[str, str]] = []
+        for path in sorted(athen_dir.glob("*.md"), key=lambda p: p.name):
+            try:
+                content = path.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            items.append({"path": path.as_posix(), "content": content})
+        if items:
+            out["athen"] = items
+
+    return out
+
+
+_NOTEBOOK_KNOWLEDGE = _load_notebook_knowledge()
+
+
 def _agent_prompt(
-    agent: AgentConfig,
-    summary: Dict[str, Any],
-    max_actions: int
+    agent: AgentConfig, summary: Dict[str, Any], max_actions: int
 ) -> List[Dict[str, str]]:
     """Generate the prompt for an agent to make a decision.
 
@@ -461,7 +751,9 @@ def _agent_prompt(
         f"You are an autonomous RTS agent controlling player {agent.player_id} in 0 A.D.",
         "",
         "## Your Task",
-        "Analyze the current game state and output 0-{} OpenEnv actions as JSON.".format(max_actions),
+        "Analyze the current game state and output 0-{} OpenEnv actions as JSON.".format(
+            max_actions
+        ),
         "",
         "## IMPORTANT: JSON Format (STRICTLY ENFORCED)",
         "Your response MUST be valid JSON matching this exact schema:",
@@ -478,27 +770,118 @@ def _agent_prompt(
         f"1. You are player_id={agent.player_id}",
         f"2. Maximum {max_actions} actions per decision",
         "3. Use only entity IDs that exist for your player in the observation",
-        "4. If no good action is available, return: {\"actions\": []}",
+        "4. Respect map_bounds if provided - keep x and z coordinates within bounds",
+        '5. If no good action is available, return: {"actions": []}',
+        "",
+        "## Resource Requirements",
+        "IMPORTANT: Check resources BEFORE attempting any action that costs resources!",
+        "",
+        "Common resource costs (approximate):",
+        "- Train worker/villager: 50 food",
+        "- Train soldier (basic): 60-80 food, 40-60 wood/metal",
+        "- Build house: 100-150 wood",
+        "- Build barracks: 200-300 wood",
+        "- Research technology: 200-500 of various resources",
+        "",
+        "If you don't have enough resources:",
+        "- DO NOT issue train/construct/research commands",
+        "- Send workers to gather the needed resource type instead",
+        "",
+        "## Decision-Making Framework",
+        "Think step by step for EVERY decision:",
+        "",
+        "1. **Check Current Resources** (in global_players[YOUR_PLAYER_ID].resources)",
+        "   - food, wood, stone, metal",
+        "   - If ANY resource < 100: PRIORITIZE gathering that resource",
+        "",
+        "2. **Check Population** (in global_players[YOUR_PLAYER_ID])",
+        "   - Current: popCount",
+        "   - Limit: popLimit",
+        "   - If popCount >= popLimit - 2: BUILD HOUSES FIRST (prevents being blocked)",
+        "",
+        "3. **Check Nearby Resources** (in nearby_resources)",
+        "   - Find closest tree/mine/berries for gathering",
+        "   - Match resource type to what you need",
+        "",
+        "4. **Check Workers vs Military Balance**",
+        "   - Count entities with 'worker' or 'female' in template (workers)",
+        "   - Count entities with 'infantry' or 'cavalry' in template (military)",
+        "   - Early game: Need 10-15 workers before building army",
+        "",
+        "5. **Check Enemy Threats** (in nearby_enemies)",
+        "   - If enemies close (<100 distance): Defense priority",
+        "   - If no enemies: Economy priority",
+        "",
+        "6. **Choose Actions Based on Priority**:",
+        "   - Priority 1: Build houses if population near limit",
+        "   - Priority 2: Gather resources if below 100 of any type",
+        "   - Priority 3: Train workers if fewer than 10",
+        "   - Priority 4: Build military buildings if resources allow",
+        "   - Priority 5: Train military units",
+        "   - Priority 6: Research technologies",
+        "",
+        "## Example Decision Process",
+        "```",
+        "Step 1: Check resources",
+        "  - food: 45 (LOW!), wood: 200, stone: 150, metal: 100",
+        "  - Decision: Need food urgently",
+        "",
+        "Step 2: Check population",
+        "  - popCount: 8, popLimit: 20",
+        "  - Decision: Population OK, no house needed yet",
+        "",
+        "Step 3: Check nearby_resources",
+        "  - Found berries at (x:550, z:600), chickens at (x:580, z:620)",
+        "  - Decision: Send workers to gather food from nearest source",
+        "",
+        "Step 4: Check workers",
+        "  - Have 4 workers (entities with 'female_citizen' template)",
+        "  - Decision: Enough for now, but may need more after food gathered",
+        "",
+        "Step 5: Action",
+        "  - Issue gather command: workers -> nearest food resource",
+        '  - Output: {"actions": [{"op": "push_command", "player_id": 1,',
+        '    "cmd": {"type": "gather", "entities": [200,201], "target": 5555, "queued": false}}]}',
+        "```",
+        "",
+        "ANOTHER EXAMPLE - Population Limit:",
+        "```",
+        "Step 1: Resources OK (food: 300, wood: 250)",
+        "Step 2: Population check",
+        "  - popCount: 18, popLimit: 20 (CRITICAL!)",
+        "  - Decision: MUST build house before training more units",
+        "",
+        "Step 3: Check entities",
+        "  - Have workers at (x:500, z:500)",
+        "  - Decision: Build house near workers",
+        "",
+        "Step 4: Action",
+        "  - Issue construct command with REQUIRED fields (x, z, angle)",
+        '  - Output: {"actions": [{"op": "push_command", "player_id": 1,',
+        '    "cmd": {"type": "construct", "entities": [200,201],',
+        '    "template": "structures/athen_house", "x": 520, "z": 510, "angle": 0, "queued": false}}]}',
+        "```",
         "",
         "## Action Schema",
         "```json",
         "{",
+        '  "reasoning": "Step 1: Checked resources - food: 45 (LOW!). Step 2: Population 8/20 (OK). Step 3: Found berries at x:550 z:600. Decision: Send 2 workers to gather food.",',
         '  "actions": [',
         "    {",
         '      "op": "push_command",',
         f'      "player_id": {agent.player_id},',
         '      "cmd": {',
-        '        "type": "walk",',
+        '        "type": "gather",',
         '        "entities": [123, 124],',
-        '        "x": 600,',
-        '        "z": 650,',
-        '        "queued": false,',
-        '        "pushFront": true',
+        '        "target": 5555,',
+        '        "queued": false',
         "      }",
         "    }",
         "  ]",
         "}",
         "```",
+        "",
+        "IMPORTANT: Include a 'reasoning' field showing your step-by-step thinking!",
         "",
         "## Available Actions",
         "You can use these command types in 'cmd':",
@@ -509,8 +892,13 @@ def _agent_prompt(
         "- patrol: {type:'patrol', entities:[...], x:NUM, z:NUM, queued:BOOL}",
         "",
         "**Combat:**",
-        "- attack: {type:'attack', entities:[...], target:ENTITY_ID, queued:BOOL}",
-        "- attack-walk: {type:'attack-walk', entities:[...], x:NUM, z:NUM, queued:BOOL}",
+        "- attack: {type:'attack', entities:[...], target:ENTITY_ID, queued:BOOL, allowCapture:BOOL}",
+        "- attack-walk: {type:'attack-walk', entities:[...], x:NUM, z:NUM, queued:BOOL, allowCapture:BOOL, targetClasses:{attack:['Unit']}}",
+        "- guard: {type:'guard', entities:[...], target:ENTITY_ID, queued:BOOL}",
+        "- stance: {type:'stance', entities:[...], name:STR, queued:BOOL}",
+        "  Common stances: 'aggressive', 'defensive', 'passive'",
+        "- formation: {type:'formation', entities:[...], name:STR, queued:BOOL}",
+        "  Common formations: 'Line Closed', 'Box', 'Column Closed'",
         "",
         "**Economy:**",
         "- gather: {type:'gather', entities:[...], target:RESOURCE_ID, queued:BOOL}",
@@ -519,9 +907,23 @@ def _agent_prompt(
         "**Building:**",
         "- construct: {type:'construct', entities:[...], template:STR, x:NUM, z:NUM, angle:NUM, queued:BOOL}",
         "  REQUIRED: x, z, angle fields for placement!",
+        "  Example templates: 'structures/athen_house', 'structures/athen_barracks'",
+        "- repair: {type:'repair', entities:[...], target:BUILDING_ID, autocontinue:BOOL, queued:BOOL}",
         "",
         "**Production:**",
-        "- train: {type:'train', entities:[BUILDING_ID], template:STR, count:NUM}",
+        "- train: {type:'train', entities:[BUILDING_ID], template:STR, count:NUM, metadata:{}}",
+        "  Example templates: 'units/athen_infantry_spearman_b'",
+        "- research: {type:'research', entity:BUILDING_ID, template:STR}",
+        "  Example templates: 'phase_town', 'phase_city'",
+        "",
+        "**Garrison:**",
+        "- garrison: {type:'garrison', entities:[...], target:BUILDING_ID, queued:BOOL}",
+        "- unload: {type:'unload', garrisonHolder:BUILDING_ID, entities:[...]}",
+        "- unload-all-by-owner: {type:'unload-all-by-owner', garrisonHolders:[...]}",
+        "",
+        "**Healing:**",
+        "- heal: {type:'heal', entities:[HEALER_ID], target:UNIT_ID, queued:BOOL}",
+        "  Note: Support varies by civilization. Use 'guard' as fallback.",
         "",
         "**Important:** Always include ALL required fields for each command type!",
         "",
@@ -529,25 +931,111 @@ def _agent_prompt(
 
     # Add strategy hint if provided
     if agent.strategy_hint:
-        system_parts.extend([
-            "## Your Strategy",
-            agent.strategy_hint.strip(),
-            "",
-        ])
+        system_parts.extend(
+            [
+                "## Your Strategy",
+                agent.strategy_hint.strip(),
+                "",
+            ]
+        )
 
-    # Add skills knowledge if available (reduced for token efficiency)
-    if _SKILLS_KNOWLEDGE and agent.provider != "gemini":
-        system_parts.extend([
-            "## Reference: Available Commands",
-            "(See documentation below for detailed command examples)",
-            "",
-            _SKILLS_KNOWLEDGE[:2000],  # Limit to avoid token overflow
-            "",
-        ])
-    elif agent.provider == "gemini":
-        # Gemini: skip detailed skills to save tokens
-        system_parts.append("Refer to the action examples above for command syntax.")
-        system_parts.append("")
+    # Add civ notebook notes if available.
+    # The state snapshot includes civ codes in global_players.
+    player_civ = None
+    gp = summary.get("global_players") if isinstance(summary, dict) else None
+    if isinstance(gp, dict):
+        pdata = gp.get(agent.player_id)
+        if isinstance(pdata, dict):
+            player_civ = pdata.get("civ")
+
+    if player_civ == "athen" and _NOTEBOOK_KNOWLEDGE.get("athen"):
+        max_total = 6000 if agent.provider == "gemini" else 12000
+        per_file_cap = 2500 if agent.provider == "gemini" else 5000
+
+        notebook_parts: list[str] = ["## Notebook: Athenians"]
+        total = len(notebook_parts[0])
+        for item in _NOTEBOOK_KNOWLEDGE["athen"]:
+            path = item.get("path")
+            content = item.get("content")
+            if not isinstance(path, str) or not isinstance(content, str):
+                continue
+
+            chunk = f"### {path}\n\n{content[:per_file_cap]}"
+            if total + len(chunk) > max_total:
+                break
+            notebook_parts.append(chunk)
+            total += len(chunk)
+
+        if len(notebook_parts) > 1:
+            system_parts.extend(
+                [
+                    "## Civilization Notes",
+                    "Use these Athenians notebook notes to guide decisions.",
+                    "\n\n".join(notebook_parts),
+                    "",
+                ]
+            )
+
+    # Add skills knowledge if available (extract relevant sections for token efficiency)
+    if _SKILLS_KNOWLEDGE:
+        # Extract key sections instead of truncating
+        relevant_sections = []
+        lines = _SKILLS_KNOWLEDGE.split("\n")
+        in_command_section = False
+        section_lines = []
+
+        for line in lines:
+            # Detect command section headers
+            if line.startswith("##") and any(
+                keyword in line.lower()
+                for keyword in [
+                    "movement",
+                    "combat",
+                    "economy",
+                    "building",
+                    "training",
+                    "garrison",
+                    "healing",
+                ]
+            ):
+                in_command_section = True
+                section_lines = [line]
+            elif line.startswith("##"):
+                # End of current section
+                if in_command_section and section_lines:
+                    relevant_sections.append("\n".join(section_lines))
+                in_command_section = False
+                section_lines = []
+            elif in_command_section:
+                section_lines.append(line)
+                # Limit section size
+                if len("\n".join(section_lines)) > 800:
+                    relevant_sections.append("\n".join(section_lines))
+                    in_command_section = False
+                    section_lines = []
+
+        # Add last section if needed
+        if in_command_section and section_lines:
+            relevant_sections.append("\n".join(section_lines))
+
+        # Join relevant sections (limit total to ~4000 chars for Gemini, ~6000 for others)
+        max_knowledge = 4000 if agent.provider == "gemini" else 6000
+        knowledge_text = "\n\n".join(relevant_sections)[:max_knowledge]
+
+        if knowledge_text:
+            system_parts.extend(
+                [
+                    "## Reference: Detailed Command Examples",
+                    knowledge_text,
+                    "",
+                ]
+            )
+        else:
+            # Fallback if extraction fails
+            system_parts.append(
+                "Refer to the action examples above for command syntax."
+            )
+            system_parts.append("")
 
     system = "\n".join(system_parts)
 
@@ -558,14 +1046,18 @@ def _agent_prompt(
         },
         "observation": summary,
         "instruction": (
-            "Analyze the game state and decide on 0-{} actions. "
-            "Check 'global_players' for your current resources and population. "
-            "Think step by step: "
-            "1. Check if you have enough resources for your desired action (e.g., training units). "
-            "2. If resources are low (e.g., < 100 food), prioritize 'gather' actions. "
-            "3. Only then, output JSON with an 'actions' array. "
-            "If uncertain, output fewer actions or an empty list."
-        ).format(max_actions),
+            "Analyze the game state using the Decision-Making Framework above. "
+            "Follow these steps IN ORDER:\n"
+            "1. Check global_players[{}].resources - Do you have enough for what you want to do?\n"
+            "2. Check global_players[{}].popCount vs popLimit - Are you near the limit?\n"
+            "3. Check nearby_resources - Where are the closest resources?\n"
+            "4. Check nearby_enemies - Are you under threat?\n"
+            "5. Count your workers vs military units from entities\n"
+            "6. Decide actions based on priorities (houses > gather > train workers > military)\n"
+            "\n"
+            "Output 0-{} actions as JSON with 'actions' array. "
+            'If you cannot do anything productive, return empty: {{"actions": []}}'
+        ).format(agent.player_id, agent.player_id, max_actions),
     }
 
     return [
@@ -596,8 +1088,12 @@ def _log_decision(log_file: Optional[Path], record: Dict[str, Any]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Multi-provider LLM arena match")
-    parser.add_argument("--config", default="configs/multi_provider_match.toml", help="Config file path")
-    parser.add_argument("--dry-run", action="store_true", help="Show prompts without calling LLMs")
+    parser.add_argument(
+        "--config", default="configs/multi_provider_match.toml", help="Config file path"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show prompts without calling LLMs"
+    )
     args = parser.parse_args()
 
     cfg_path = Path(args.config)
@@ -614,7 +1110,9 @@ def main() -> None:
     max_actions = int(match.get("max_actions_per_decision", 3))
     max_entities = int(match.get("max_entities_in_summary", 50))
     log_decisions = match.get("log_decisions", False)
-    log_file = Path(match["log_file"]) if log_decisions and "log_file" in match else None
+    log_file = (
+        Path(match["log_file"]) if log_decisions and "log_file" in match else None
+    )
 
     # Parse player configurations
     players_cfg = cfg.get("players") or {}
@@ -657,7 +1155,9 @@ def main() -> None:
     print()
 
     if not agents:
-        raise SystemExit("No enabled agents found in configuration. Enable at least one player.")
+        raise SystemExit(
+            "No enabled agents found in configuration. Enable at least one player."
+        )
 
     print(f"Enabled Agents: {len(agents)}")
     for a in agents:
@@ -667,7 +1167,9 @@ def main() -> None:
         print(f"    Base URL: {a.base_url}")
 
     # Check for AI-controlled players
-    all_player_ids = set(p.get("player_id") for p in players_cfg.values() if p.get("player_id"))
+    all_player_ids = set(
+        p.get("player_id") for p in players_cfg.values() if p.get("player_id")
+    )
     agent_player_ids = set(a.player_id for a in agents)
     ai_controlled = sorted(all_player_ids - agent_player_ids)
 
@@ -712,10 +1214,14 @@ def main() -> None:
             last_step = current_step
             decision_count += 1
 
-            print(f"\n[Decision {decision_count}] Step {current_step}, Time {snap.get('time', 'unknown')}")
+            print(
+                f"\n[Decision {decision_count}] Step {current_step}, Time {snap.get('time', 'unknown')}"
+            )
 
             # Summarize state for agents
-            summary = _summarize_state(snap, [a.player_id for a in agents], max_entities=max_entities)
+            summary = _summarize_state(
+                snap, [a.player_id for a in agents], max_entities=max_entities
+            )
 
             # Each agent makes a decision
             for agent in agents:
@@ -741,6 +1247,7 @@ def main() -> None:
                 # Parse and validate JSON response
                 obj = None
                 validation_error = None
+                reasoning = None
 
                 # Try Pydantic validation (strictest)
                 try:
@@ -748,6 +1255,7 @@ def main() -> None:
                     data = json.loads(output.strip())
                     validated = GameActions.model_validate(data)
                     obj = validated.model_dump(exclude_none=True)
+                    reasoning = obj.get("reasoning")  # Extract reasoning if present
                 except json.JSONDecodeError as e:
                     validation_error = f"JSON decode error: {e}"
                     # Fallback to extraction
@@ -756,15 +1264,28 @@ def main() -> None:
                         try:
                             validated = GameActions.model_validate(obj)
                             obj = validated.model_dump()
+                            reasoning = obj.get("reasoning")
                             validation_error = None  # Success via extraction
                         except Exception as ve:
                             validation_error = f"Pydantic validation error: {ve}"
                 except Exception as e:
                     validation_error = f"Pydantic validation error: {e}"
                     obj = _json_extract(output)
+                    if obj:
+                        reasoning = obj.get("reasoning")
 
-                if not obj or "actions" not in obj or not isinstance(obj["actions"], list):
-                    print(f"  [{agent.name}] ✗ Invalid output (expected JSON with 'actions' array)")
+                # Display reasoning if available
+                if reasoning:
+                    print_reasoning(agent.name, reasoning)
+
+                if (
+                    not obj
+                    or "actions" not in obj
+                    or not isinstance(obj["actions"], list)
+                ):
+                    print(
+                        f"  [{agent.name}] ✗ Invalid output (expected JSON with 'actions' array)"
+                    )
                     print(f"  Output length: {len(output)} chars")
                     print(f"  First 500 chars: {output[:500]}")
                     if validation_error:
@@ -774,16 +1295,19 @@ def main() -> None:
                     else:
                         print(f"  JSON extraction failed - no valid JSON found")
                     if log_file:
-                        _log_decision(log_file, {
-                            "timestamp": datetime.now().isoformat(),
-                            "step": current_step,
-                            "agent": agent.name,
-                            "error": "invalid_output",
-                            "validation_error": validation_error,
-                            "output": output[:1000],
-                            "output_length": len(output),
-                            "extracted_obj": str(obj) if obj else None,
-                        })
+                        _log_decision(
+                            log_file,
+                            {
+                                "timestamp": datetime.now().isoformat(),
+                                "step": current_step,
+                                "agent": agent.name,
+                                "error": "invalid_output",
+                                "validation_error": validation_error,
+                                "output": output[:1000],
+                                "output_length": len(output),
+                                "extracted_obj": str(obj) if obj else None,
+                            },
+                        )
                     continue
 
                 # Execute actions
@@ -810,7 +1334,9 @@ def main() -> None:
                                 cmd["angle"] = 0  # Default angle if missing
 
                             if missing_fields:
-                                print(f"  [{agent.name}] ✗ construct command missing required fields: {missing_fields}")
+                                print(
+                                    f"  [{agent.name}] ✗ construct command missing required fields: {missing_fields}"
+                                )
                                 print(f"    Command: {json.dumps(cmd, indent=2)[:200]}")
                                 actions_rejected += 1
                                 continue
@@ -818,7 +1344,10 @@ def main() -> None:
                         # Remove null fields that shouldn't be there
                         if isinstance(cmd, dict):
                             # targetClasses should only be in attack-walk
-                            if cmd.get("type") not in ("attack-walk",) and "targetClasses" in cmd:
+                            if (
+                                cmd.get("type") not in ("attack-walk",)
+                                and "targetClasses" in cmd
+                            ):
                                 del cmd["targetClasses"]
                             # metadata should only be in train
                             if cmd.get("type") not in ("train",) and "metadata" in cmd:
@@ -826,13 +1355,17 @@ def main() -> None:
 
                     try:
                         resp = openenv_step(openenv_base, action)
-                        obs = resp.get("observation") if isinstance(resp, dict) else None
+                        obs = (
+                            resp.get("observation") if isinstance(resp, dict) else None
+                        )
 
                         if isinstance(obs, dict):
                             if obs.get("ok") is False:
                                 actions_rejected += 1
                                 error_msg = obs.get("error", "unknown")
-                                print(f"  [{agent.name}] ✗ Action rejected: {error_msg}")
+                                print(
+                                    f"  [{agent.name}] ✗ Action rejected: {error_msg}"
+                                )
                             else:
                                 actions_sent += 1
                         else:
@@ -855,22 +1388,30 @@ def main() -> None:
 
                 # Log decision
                 status_icon = "✓" if actions_sent > 0 else "○"
-                print(f"  [{agent.name}] {status_icon} Sent {actions_sent}/{len(obj['actions'])} actions ({elapsed:.2f}s)")
-                if obj['actions']:
-                    print(f"  [{agent.name}] Parsed Decisions: {json.dumps(obj['actions'], indent=2)}")
+                print(
+                    f"  [{agent.name}] {status_icon} Sent {actions_sent}/{len(obj['actions'])} actions ({elapsed:.2f}s)"
+                )
+                if obj["actions"]:
+                    print(
+                        f"  [{agent.name}] Parsed Decisions: {json.dumps(obj['actions'], indent=2)}"
+                    )
 
                 if log_file:
-                    _log_decision(log_file, {
-                        "timestamp": datetime.now().isoformat(),
-                        "step": current_step,
-                        "agent": agent.name,
-                        "model": agent.model,
-                        "provider": agent.provider,
-                        "actions_sent": actions_sent,
-                        "actions_rejected": actions_rejected,
-                        "elapsed_s": elapsed,
-                        "output": output,
-                    })
+                    _log_decision(
+                        log_file,
+                        {
+                            "timestamp": datetime.now().isoformat(),
+                            "step": current_step,
+                            "agent": agent.name,
+                            "model": agent.model,
+                            "provider": agent.provider,
+                            "reasoning": reasoning,
+                            "actions_sent": actions_sent,
+                            "actions_rejected": actions_rejected,
+                            "elapsed_s": elapsed,
+                            "output": output,
+                        },
+                    )
 
             # Wait before next decision
             time.sleep(decision_interval_s)

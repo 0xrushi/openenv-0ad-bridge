@@ -18,30 +18,26 @@ log_file = "run/gemini_vs_ai.jsonl"
 [players.gemini]
 enabled = true  # Set to false to disable this player
 player_id = 1
-name = "Gemini-3.0-Flash"
+name = "Gemini-3-Flash-Preview"
 provider = "gemini"
 
 # Gemini model configuration
 # Available models:
-#   - gemini-2.0-flash (latest, fast, recommended)
-#   - gemini-2.0-flash-001 (stable version 001)
-#   - gemini-1.5-pro (most capable, slower)
-#   - gemini-1.5-flash (fast, efficient)
-model = "gemini-2.0-flash"  # Switch to stable model
+#   - gemini-3-flash-preview (fast, latest, recommended)
+model = "gemini-3-flash-preview"
 temperature = 0.3
 max_output_tokens = 4096  # Maximum for better response completion
 
 # Get your API key from: https://aistudio.google.com/app/apikey
-# Option 1: Set directly in config (convenient but less secure)
-api_key = "1234"
-
-# Option 2: Use environment variable (more secure)
-# api_key_env = "GEMINI_API_KEY"
+# Option: Use environment variable
+api_key_env = "GEMINI_API_KEY"
 # Then set: export GEMINI_API_KEY=your-key-here
 
 # Strategy for this agent
 strategy_hint = """
 You are playing as Player 1 against the built-in 0 A.D. AI using Google Gemini.
+
+You are playing as the Athenians (civ: athen). Use the Athenians notebook notes included in the system prompt (from `notebook/athenian/*.md`) to guide your build order, tech choices, and unit composition.
 
 Strategy:
 1. Early economy: Train 10-12 workers (female citizens)

@@ -75,7 +75,7 @@ Focus on:
 # provider = "gemini"
 #
 # # Gemini model configuration
-# model = "gemini-2.0-flash-exp"  # or "gemini-1.5-pro", "gemini-1.5-flash"
+# model = "gemini-2.0-flash"  # or "gemini-2.0-flash-001", "gemini-1.5-pro", "gemini-1.5-flash"
 # temperature = 0.3
 # max_output_tokens = 800
 #

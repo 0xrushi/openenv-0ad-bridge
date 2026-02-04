@@ -97,6 +97,11 @@ def main() -> None:
         help="Autostart map (e.g. scenarios/arcadia, random/anatolian_plateau)",
     )
     parser.add_argument(
+        "--civ",
+        default=None,
+        help="Force a civilization by selecting a civ-specific sandbox scenario (e.g. athen).",
+    )
+    parser.add_argument(
         "--no-kill", action="store_true", help="Do not kill an existing session"
     )
     args = parser.parse_args()
@@ -120,6 +125,9 @@ def main() -> None:
     window.rename_window("zero-ad")
 
     pane_a = window.active_pane
+    if pane_a is None:
+        raise SystemExit("tmux window has no active pane")
+    civ_arg = f" --civ={args.civ!r}" if args.civ else ""
     pane_a.send_keys(
         _sh(
             "set -e; "
@@ -127,10 +135,13 @@ def main() -> None:
             + venv_prefix
             + f"export ZEROAD_RL_INTERFACE={rl_addr!r} && "
             + f"python launcher.py --map={args.map!r}"
+            + civ_arg
         )
     )
 
     pane_b = _split(window, vertical=True)
+    if pane_b is None:
+        raise SystemExit("tmux split returned no pane")
     pane_b.send_keys(
         _sh(
             "set -e; "
@@ -149,6 +160,8 @@ def main() -> None:
     )
 
     pane_c = _split(pane_a, vertical=False)
+    if pane_c is None:
+        raise SystemExit("tmux split returned no pane")
     pane_c_cmd = (
         "set -e; "
         f"cd {str(project_root)!r} && "
@@ -162,6 +175,8 @@ def main() -> None:
     pane_c.send_keys(_sh(pane_c_cmd))
 
     pane_d = _split(pane_b, vertical=False)
+    if pane_d is None:
+        raise SystemExit("tmux split returned no pane")
     # Start an interactive shell in pane D, then configure it explicitly.
     # Setting env vars inside a subshell isn't always reliable across shells,
     # so we send the setup commands directly to the pane.
